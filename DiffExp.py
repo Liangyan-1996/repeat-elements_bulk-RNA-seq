@@ -40,6 +40,7 @@ def load_count_data(count_dir):
     all_counts = pd.concat(group_counts.values(), axis=1)
     # Remove duplicate gene_id columns
     all_counts = all_counts.loc[:,~all_counts.columns.duplicated()]
+    all_counts = all_counts.set_index("gene_id").T
     
     # Create sample info dataframe
     sample_df = pd.DataFrame(sample_info)
@@ -53,34 +54,34 @@ def run_differential_expression(counts_df, sample_df, control_group='Nontargetin
     """
     # Get all groups
     groups = sample_df['group'].unique()
-    
+
     # Run analysis for each group vs control
     results = {}
     for group in groups:
         if group != control_group:
             # Create contrast
-            contrast_samples = sample_df[sample_df['group'].isin([control_group, group])]
-            contrast_counts = counts_df[contrast_samples.index]
-            
+            contrast_samples = sample_df[sample_df['group'].isin([control_group, group])].sort_values(by='group')
+            contrast_counts = counts_df.loc[contrast_samples.index]
+
             # Create design matrix
             design_matrix = contrast_samples.copy()
-            
+
             # Initialize DeseqDataSet
             dds = DeseqDataSet(
                 counts=contrast_counts,
                 metadata=design_matrix,
-                design_factors="group",
+                design="~group",
                 refit_cooks=True,
                 n_cpus=16
             )
-            
+
             # Run differential expression analysis
             dds.deseq2()
-            
+
             # Get results
             stat_res = DeseqStats(dds, contrast=["group", group, control_group])
             stat_res.summary()
-            stat_res.lfc_shrink(coeff="condition[T.B]")
+            stat_res.lfc_shrink(coeff=f"group[T.{group}]")
             results[group] = stat_res.results_df
     
     return results
@@ -100,10 +101,10 @@ def save_results(results, output_dir='DESeq2_results'):
 def main():
     # Load count data
     counts_df, sample_df = load_count_data('TEcount')
-    
+
     # Run differential expression analysis
     results = run_differential_expression(counts_df, sample_df)
-    
+
     # Save results
     save_results(results)
 
