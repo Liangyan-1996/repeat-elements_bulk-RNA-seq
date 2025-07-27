@@ -34,7 +34,7 @@ def load_count_data(count_dir):
         group_counts[group] = pd.concat([group_counts[group], counts_col], axis=1)
         
         # Add sample info
-        sample_info.append({'sample': file.replace('.cntTable', ''), 'group': group})
+        sample_info.append({'sample': file.replace('.cntTable', ''), 'condition': group})
     
     # Combine all count data into a single matrix
     all_counts = pd.concat(group_counts.values(), axis=1)
@@ -53,35 +53,31 @@ def run_differential_expression(counts_df, sample_df, control_group='Nontargetin
     Run differential expression analysis using pydeseq2
     """
     # Get all groups
-    groups = sample_df['group'].unique()
+    groups = sample_df['condition'].unique()
 
     # Run analysis for each group vs control
     results = {}
     for group in groups:
         if group != control_group:
             # Create contrast
-            contrast_samples = sample_df[sample_df['group'].isin([control_group, group])].sort_values(by='group')
+            contrast_samples = sample_df[sample_df['condition'].isin([control_group, group])].sort_values(by='condition')
             contrast_counts = counts_df.loc[contrast_samples.index]
-
             # Create design matrix
             design_matrix = contrast_samples.copy()
-
             # Initialize DeseqDataSet
             dds = DeseqDataSet(
                 counts=contrast_counts,
                 metadata=design_matrix,
-                design="~group",
+                design="~condition",
                 refit_cooks=True,
                 n_cpus=16
             )
-
             # Run differential expression analysis
             dds.deseq2()
-
             # Get results
-            stat_res = DeseqStats(dds, contrast=["group", group, control_group])
+            stat_res = DeseqStats(dds, contrast=["condition", group, control_group])
             stat_res.summary()
-            stat_res.lfc_shrink(coeff=f"group[T.{group}]")
+            # stat_res.lfc_shrink(coeff=f"condition[T.{group}]")
             results[group] = stat_res.results_df
     
     return results
